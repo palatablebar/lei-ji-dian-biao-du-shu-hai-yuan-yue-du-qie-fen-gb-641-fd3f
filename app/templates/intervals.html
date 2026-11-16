@@ -22,19 +22,51 @@
   <div class="kpi"><span class="kpi-label">区间数</span><span class="kpi-value mono">{{ intervals|length }}</span></div>
   <div class="kpi"><span class="kpi-label">主表用量</span><span class="kpi-value mono">{{ totals.interval_usage|kwh }}</span><span class="kpi-unit">kWh</span></div>
   <div class="kpi"><span class="kpi-label">翻转</span><span class="kpi-value mono">{{ method_counts.rollover or 0 }}</span></div>
-  <div class="kpi"><span class="kpi-label">新表首读</span><span class="kpi-value mono">{{ method_counts.replacement_first or 0 }}</span></div>
+  <div class="kpi"><span class="kpi-label">新表首段</span><span class="kpi-value mono">{{ method_counts.replacement_first or 0 }}</span></div>
+  <div class="kpi"><span class="kpi-label">不可证明缺口</span><span class="kpi-value mono">{{ gaps|length }}</span></div>
   <div class="kpi"><span class="kpi-label">带标记</span><span class="kpi-value mono">{{ flagged|length }}</span></div>
 </section>
 
-{% if swaps %}
+{% if chains %}
 <section class="panel">
-  <div class="panel-head"><h2 class="panel-title">换表事件</h2></div>
+  <div class="panel-head"><h2 class="panel-title">换表链</h2>
+    <span class="panel-sub">装表底码 + 装工单齐全才可证明，否则首段记缺口</span></div>
   <table class="table table-compact">
-    <thead><tr><th>旧表</th><th>新表</th><th>换表时点</th></tr></thead>
+    <thead><tr><th>表链</th><th>表号</th><th>换表时点</th><th class="num">装表底码</th><th>装工单</th><th>证据</th></tr></thead>
     <tbody>
-      {% for item in swaps %}
-      <tr><td class="mono">{{ item.meter_id }}</td><td class="mono">{{ item.replaced_by }}</td>
-        <td class="mono">{{ item.replaced_at|localdt }}</td></tr>
+      {% for chain in chains %}
+        {% for link in chain.links %}
+        <tr>
+          {% if loop.first %}<td class="mono" rowspan="{{ chain.links|length }}">{{ chain.meters|join(' → ') }}</td>{% endif %}
+          <td class="mono">{{ link.meter_id }}</td>
+          <td class="mono">{{ link.replaced_at|localdt if link.replaced_at else '—' }}</td>
+          <td class="num mono">{{ link.install_reading if link.install_reading is not none else '—' }}</td>
+          <td class="mono">{{ link.install_order or '—' }}</td>
+          <td>{% if link.install_proven %}<span class="badge badge-plain">可证明</span>{% else %}<span class="badge badge-warn">不足</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if gaps %}
+<section class="panel">
+  <div class="panel-head"><h2 class="panel-title">不可证明缺口</h2>
+    <span class="panel-sub">电量恒 0，不进月度与账单；端点原值保留备查</span></div>
+  <table class="table table-compact">
+    <thead><tr><th>区间号</th><th>表号</th><th>起</th><th>止</th><th class="num">端点原值</th><th>原因</th></tr></thead>
+    <tbody>
+      {% for row in gaps %}
+      <tr>
+        <td class="mono">{{ row.interval_id }}</td>
+        <td class="mono">{{ row.meter_id }}</td>
+        <td class="mono">{{ row.start_at|localdt }}</td>
+        <td class="mono">{{ row.end_at|localdt }}</td>
+        <td class="num mono">{{ row.prev_reading|dec }} → {{ row.cur_reading|dec }}</td>
+        <td class="cell-flags mono">{% for flag in row.flags if flag != 'K_GAP_UNPROVEN' %}<span class="chip chip-warn">{{ flag|code }}</span>{% endfor %}</td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>

@@ -1,7 +1,9 @@
-"""换表事件：旧表停抄、新表从零起算，换表区间必须拆成两段。
+"""换表事件与表链：旧表停抄、新表从装表底码起算，换表区间必须拆成两段。
 
 朴素实现把同一块表的上读与下读相减；换表后两个示数来自不同物理表，
-相减得到负数，于是整段被丢掉或倒扣。这里把换表点显式建模。
+相减得到负数，于是整段被丢掉或倒扣。这里把换表点显式建模，
+并把多次换表接成整条链：A→B→C 的每个换表点独立判定，
+中间表既承接前一段首读，也向后一段交出末读。
 """
 from __future__ import annotations
 
@@ -35,32 +37,23 @@ def predecessor_map(contracts: dict[str, contract_mod.MeterContract],
     return out
 
 
-def detect_cycles(contracts: dict[str, contract_mod.MeterContract]) -> list[list[str]]:
-    """换表链成环：A→B→A 会让「新表首读起算」无限追下去。"""
-    cycles: list[list[str]] = []
-    for start in contracts:
-        seen: list[str] = []
-        cursor = start
-        while cursor in contracts and contracts[cursor].replaced_by:
-            if cursor in seen:
-                cycles.append(seen[seen.index(cursor):] + [cursor])
-                break
-            seen.append(cursor)
+def chains(contracts: dict[str, contract_mod.MeterContract]) -> list[list[str]]:
+    """整条换表链：从链头（没有前驱的表）沿 replaced_by 走到链尾。
+
+    契约加载已保证不成环、一表一继，这里只管顺序拼接。
+    """
+    predecessors = predecessor_map(contracts)
+    heads = [meter_id for meter_id, contract in contracts.items()
+             if contract.replaced_by and meter_id not in predecessors]
+    out: list[list[str]] = []
+    for head in sorted(heads):
+        chain = [head]
+        cursor = head
+        while contracts[cursor].replaced_by:
             cursor = contracts[cursor].replaced_by
-    return cycles
+            chain.append(cursor)
+        out.append(chain)
+    return out
 
 
-def is_first_reading_after_swap(meter: contract_mod.MeterContract,
-                                predecessor: contract_mod.MeterContract | None,
-                                read_at) -> bool:
-    return predecessor is not None and predecessor.replaced_at is not None
-
-
-def swap_note(meter_id: str, predecessor: contract_mod.MeterContract | None) -> str:
-    if predecessor is None or predecessor.replaced_at is None:
-        return ""
-    return f"承接 {predecessor.meter_id}，换表时点 {predecessor.replaced_at.isoformat()}"
-
-
-__all__ = ["replacement_pairs", "predecessor_map", "detect_cycles",
-           "is_first_reading_after_swap", "swap_note", "rollover"]
+__all__ = ["replacement_pairs", "predecessor_map", "chains", "rollover"]

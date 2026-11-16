@@ -59,6 +59,8 @@
   font-size: 13px;
 }
 .notice.is-error { border-color: var(--bad); background: #f7e3e1; }
+.notice-warn { border-color: var(--warn); background: #f8eed8; margin-bottom: 12px; }
+.notice-warn a { color: var(--accent); }
 
 .kpis {
   display: grid;

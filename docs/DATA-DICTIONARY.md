@@ -25,7 +25,9 @@
 | `unit` | 契约单位 | 只能是 `kWh` / `MWh`；读数先折到它 |
 | `registers` | 寄存器组合，`;` 分隔 | 子集 of TOTAL/PEAK/FLAT/VALLEY |
 | `replaced_at` | 换表时点 | 带偏移；与 `replaced_by` 成对出现 |
-| `replaced_by` | 新表号 | 必须存在于契约 |
+| `replaced_by` | 新表号 | 必须存在于契约；多块旧表不能指向同一新表；链不成环 |
+| `install_reading` | 装表底码（挂网起始示数） | 可空；非负且 ≤ 满量 |
+| `install_order` | 装工单号（底码的证据） | 可空；与底码同时存在才算证据充分 |
 
 主寄存器：有 `TOTAL` 取 `TOTAL`，否则取第一个分量。区间账与月度账只统计主寄存器，避免与峰平谷重复计数。
 
@@ -64,8 +66,15 @@
 | 满量翻转 | 本次 < 上次 且 上次 ≥ 满量 × 0.9 且 补满量后差值 ≤ 满量 | 差值 = 满量 − 上次 + 本次 |
 | 倒走 | 本次 < 上次 且 不满足翻转前提 | `Q_REVERSE_READING`，整行隔离 |
 | 换表末段 | 旧表最后一条读数（≤ 换表时点） | 区间止点 = 换表时点 |
-| 新表首读 | 新表第一条读数 | 区间 = [换表时点, 首读时间)，用量从 0 起算 |
+| 旧表末段缺口 | 旧表末读时刻 < 换表时点 | 记 `gap_unproven` + `K_FINAL_MISSING`，电量 0 |
+| 新表首段 | 底码 + 装工单齐全 且 首读 ≥ 底码 | 区间 = [换表时点, 首读时间)，从底码起算，标 `K_INSTALL_BASE` |
+| 首段缺口·证据不足 | 底码或装工单缺失 | 记 `gap_unproven` + `K_INSTALL_MISSING`，电量 0，不按零计入 |
+| 首段缺口·底码不符 | 首读 < 装表底码 | 记 `gap_unproven` + `K_INSTALL_MISMATCH`，电量 0，端点保留双方原值 |
 | 估抄 | `read_type = E` | 不作锚点、不参与单调判定，落在区间内时给区间打 `K_ESTIMATE_SKIPPED` |
+
+缺口段（`gap_unproven`）电量恒 0：不进月度分摊、不进账单，但在区间明细、
+区间 CSV、月度页提示与运行清单里全程可见；首读本身仍作后续区间的锚点，
+表链不断、原始读数不丢。补录底码与装工单后重跑，缺口段转为可计量。
 
 ## 8 尾差处理
 
@@ -79,6 +88,6 @@
 
 行级 `Q_*`：`Q_COLUMN_COUNT`、`Q_TRUNCATED_ROW`、`Q_MISSING_READING`、`Q_BAD_READING`、`Q_BAD_TIME`、`Q_UNKNOWN_METER`、`Q_BAD_REGISTER`、`Q_BAD_UNIT`、`Q_BAD_READ_TYPE`、`Q_NEGATIVE_READING`、`Q_EXCEEDS_CAPACITY`、`Q_REVERSE_READING`、`Q_DUPLICATE_CONFLICT`、`Q_METER_RETIRED`。
 
-标记 `K_*`：`K_ROLLOVER`、`K_REPLACEMENT_FIRST`、`K_ESTIMATE_SKIPPED`、`K_CHARSET_FALLBACK`、`K_BOM_STRIPPED`、`K_SEGMENT_SPLIT`、`K_TRUNCATED_TAIL`、`K_TOU_ADJUSTED`、`K_BILL_ROUNDED`、`K_UNIT_ASSUMED`、`K_UNIT_CONVERTED`、`K_DUPLICATE_IDENTICAL`。
+标记 `K_*`：`K_ROLLOVER`、`K_INSTALL_BASE`、`K_GAP_UNPROVEN`、`K_INSTALL_MISSING`、`K_INSTALL_MISMATCH`、`K_FINAL_MISSING`、`K_ESTIMATE_SKIPPED`、`K_CHARSET_FALLBACK`、`K_BOM_STRIPPED`、`K_SEGMENT_SPLIT`、`K_TRUNCATED_TAIL`、`K_TOU_ADJUSTED`、`K_BILL_ROUNDED`、`K_UNIT_ASSUMED`、`K_UNIT_CONVERTED`、`K_DUPLICATE_IDENTICAL`。
 
 唯一来源：`app/reasons.py`；页面与导出的原因文案都从它取。

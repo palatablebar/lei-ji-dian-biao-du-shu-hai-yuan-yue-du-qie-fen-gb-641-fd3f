@@ -101,10 +101,12 @@ def run(settings, store, *, sample: str | None = None, mode: str = "full") -> di
     intervals = restore_mod.build_intervals(quality["valid"], quality["estimate"],
                                             contracts)
     interval_stats = restore_mod.totals(intervals, contracts)
+    gap_rows = restore_mod.gaps(intervals)
     stages.append({"stage": "restore", "in_count": len(quality["valid"]),
                    "out_count": len(intervals), "quarantine_count": 0, "status": "ok",
                    "elapsed_ms": _ms(mark),
-                   "note": f"{interval_stats['primary_usage_kwh']} kWh"})
+                   "note": f"{interval_stats['primary_usage_kwh']} kWh"
+                           + (f" · 缺口 {len(gap_rows)}" if gap_rows else "")})
 
     # ---- M5 切分 ----
     mark = time.perf_counter()
@@ -157,6 +159,7 @@ def run(settings, store, *, sample: str | None = None, mode: str = "full") -> di
         "month_usage": month_usage,
         "bill_amount": bill_total.quantize(config.MONEY_QUANT),
         "interval_count": len(intervals),
+        "gap_count": len(gap_rows),
         "allocation_count": len(allocated["allocations"]),
         "bill_count": len(allocated["bills"]),
         "month_count": allocated["stats"]["month_count"],
@@ -184,7 +187,7 @@ def run(settings, store, *, sample: str | None = None, mode: str = "full") -> di
             valid=len(quality["valid"]), estimate=len(quality["estimate"]),
             quarantine=len(quarantine), blank=ingested.blank_lines,
             intervals=len(intervals), allocations=len(allocated["allocations"]),
-            bills=len(allocated["bills"])),
+            bills=len(allocated["bills"]), gaps=len(gap_rows)),
         reconcile=reconcile)
 
     readings_rows = [{

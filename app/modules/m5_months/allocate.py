@@ -19,7 +19,12 @@ def allocate(intervals: list[dict],
              contracts: dict[str, contract_mod.MeterContract],
              prices: dict[str, Decimal]) -> dict:
     buckets: dict[tuple, dict] = {}
+    unproven_gaps: list[dict] = []
     for interval in intervals:
+        if interval["usage_kwh"] == 0:
+            # 不可证明缺口：电量恒 0，不产生分摊行，但逐段留痕给月度页与清单
+            unproven_gaps.append(interval)
+            continue
         import datetime as dt
         start = dt.datetime.fromisoformat(interval["start_at"])
         end = dt.datetime.fromisoformat(interval["end_at"])
@@ -45,6 +50,7 @@ def allocate(intervals: list[dict],
     return {
         "allocations": allocations,
         "bills": bills,
+        "gaps": unproven_gaps,
         "stats": {
             "month_count": len({item["month"] for item in allocations}),
             "allocation_count": len(allocations),

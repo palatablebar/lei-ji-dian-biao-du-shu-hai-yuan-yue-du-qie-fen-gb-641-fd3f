@@ -16,7 +16,7 @@ from ... import config, errors, reasons
 from . import units
 
 FIELDS = ("meter_id", "name", "capacity", "multiplier", "unit", "registers",
-          "replaced_at", "replaced_by")
+          "replaced_at", "replaced_by", "install_reading", "install_order")
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,8 @@ class MeterContract:
     replaced_at: dt.datetime | None
     replaced_by: str | None
     tariff: str
+    install_reading: Decimal | None   # 装表底码：新表挂网时的起始示数
+    install_order: str | None         # 装工单号：底码的证据，缺了底码也不能采信
 
     @property
     def primary_register(self) -> str:
@@ -39,6 +41,11 @@ class MeterContract:
     @property
     def rollover_floor(self) -> Decimal:
         return (self.capacity * config.ROLLOVER_MIN_RATIO).quantize(Decimal("0.01"))
+
+    @property
+    def install_proven(self) -> bool:
+        """装表证据充分 = 底码与装工单同时存在；缺一样都不能凭首读猜电量。"""
+        return self.install_reading is not None and bool(self.install_order)
 
 
 def _fail(message: str, meter_id: str = "") -> None:
@@ -61,10 +68,30 @@ def _parse_instant(raw: str) -> dt.datetime | None:
     return value.astimezone(config.UTC)
 
 
+def _parse_install_reading(raw: str, meter_id: str,
+                           capacity: Decimal) -> Decimal | None:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        value = Decimal(text)
+    except Exception:
+        _fail(f"装表底码不是数字：{meter_id}", meter_id)
+        return None
+    if value < 0:
+        _fail(f"装表底码不能为负：{meter_id}", meter_id)
+    if value > capacity:
+        _fail(f"装表底码 {value} 超过满量 {capacity}：{meter_id}", meter_id)
+    return value
+
+
 def parse_rows(rows: list[dict]) -> dict[str, MeterContract]:
     """meter_id 保持字符串：`007` 不能变成 `7`。"""
     contracts: dict[str, MeterContract] = {}
     for row in rows:
+        if None in row or None in row.values():
+            # DictReader 对列数不符静默错位：多列进 None 键、缺列补 None 值
+            _fail(f"契约行列数与表头不一致：{row.get('meter_id')!r}")
         meter_id = (row.get("meter_id") or "").strip()
         if not meter_id:
             _fail("表计契约存在空表号")
@@ -101,13 +128,44 @@ def parse_rows(rows: list[dict]) -> dict[str, MeterContract]:
             replaced_at=_parse_instant(row.get("replaced_at") or ""),
             replaced_by=replaced_by,
             tariff=(row.get("tariff") or "单一制").strip(),
+            install_reading=_parse_install_reading(
+                row.get("install_reading") or "", meter_id, capacity),
+            install_order=(row.get("install_order") or "").strip() or None,
         )
-    for contract in contracts.values():
-        if contract.replaced_by and contract.replaced_by not in contracts:
-            _fail(f"换表目标不存在：{contract.replaced_by}", contract.meter_id)
-        if contract.replaced_by and contract.replaced_at is None:
-            _fail(f"换表缺少时点：{contract.meter_id}", contract.meter_id)
+    _validate_swap_links(contracts)
     return contracts
+
+
+def _validate_swap_links(contracts: dict[str, MeterContract]) -> None:
+    """换表链完整性：目标存在、时点成对、一表一继、不成环。
+
+    链式换表（A→B→C）是合法的；环与多表同继会让「首读起算」追错对象，
+    必须在契约阶段整批失败，而不是在还原时静默丢段。
+    """
+    successors: dict[str, str] = {}
+    for contract in contracts.values():
+        if not contract.replaced_by:
+            if contract.replaced_at is not None:
+                _fail(f"换表时点与新表号必须成对出现：{contract.meter_id}",
+                      contract.meter_id)
+            continue
+        if contract.replaced_by not in contracts:
+            _fail(f"换表目标不存在：{contract.replaced_by}", contract.meter_id)
+        if contract.replaced_at is None:
+            _fail(f"换表缺少时点：{contract.meter_id}", contract.meter_id)
+        if contract.replaced_by in successors:
+            _fail(f"多块旧表指向同一新表：{contract.replaced_by}",
+                  contract.replaced_by)
+        successors[contract.replaced_by] = contract.meter_id
+    for start in contracts:
+        seen: set[str] = set()
+        cursor = start
+        while cursor in contracts and contracts[cursor].replaced_by:
+            nxt = contracts[cursor].replaced_by
+            if nxt in seen or nxt == start:
+                _fail(f"换表链成环：{start}", start)
+            seen.add(cursor)
+            cursor = nxt
 
 
 def load(settings) -> dict[str, MeterContract]:
@@ -132,15 +190,6 @@ def load_prices(settings) -> dict[str, Decimal]:
     return prices or dict(config.DEFAULT_PRICES)
 
 
-def predecessors(contracts: dict[str, MeterContract]) -> dict[str, MeterContract]:
-    """新表 → 被替换的旧表契约，用于「新表首读起算」。"""
-    out: dict[str, MeterContract] = {}
-    for contract in contracts.values():
-        if contract.replaced_by:
-            out.setdefault(contract.replaced_by, contract)
-    return out
-
-
 def payload(contracts: dict[str, MeterContract]) -> list[dict]:
     rows = []
     for contract in sorted(contracts.values(), key=lambda c: c.meter_id):
@@ -157,6 +206,10 @@ def payload(contracts: dict[str, MeterContract]) -> list[dict]:
                             if contract.replaced_at else None),
             "replaced_by": contract.replaced_by,
             "tariff": contract.tariff,
+            "install_reading": (str(contract.install_reading)
+                                if contract.install_reading is not None else None),
+            "install_order": contract.install_order,
+            "install_proven": contract.install_proven,
             "rollover_floor": str(contract.rollover_floor),
         })
     return rows

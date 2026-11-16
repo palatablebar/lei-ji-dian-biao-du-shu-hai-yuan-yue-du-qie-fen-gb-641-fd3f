@@ -89,5 +89,5 @@ def quarantine_rows(quarantine: list[dict]) -> list[list[str]]:
 
 def _method_label(method: str) -> str:
     return {"normal": "常规", "rollover": "满量翻转",
-            "replacement_first": "新表首读", "replacement_last": "换表末读"}.get(
-                method, method)
+            "replacement_first": "新表首段", "replacement_last": "换表末读",
+            "gap_unproven": "不可证明缺口"}.get(method, method)

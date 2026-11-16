@@ -29,12 +29,14 @@ NAV = (
 STATUS_LABELS = {
     "done": "完成", "failed": "失败", "running": "运行中", "partial": "未完成",
     "valid": "有效", "estimate": "估抄", "quarantine": "隔离",
-    "normal": "常规", "rollover": "满量翻转", "replacement_first": "新表首读",
-    "replacement_last": "换表末读", "ok": "就绪", "skipped": "跳过",
+    "normal": "常规", "rollover": "满量翻转", "replacement_first": "新表首段",
+    "replacement_last": "换表末读", "gap_unproven": "不可证明缺口",
+    "ok": "就绪", "skipped": "跳过",
 }
 METHOD_LABELS = {
     "normal": "常规", "rollover": "满量翻转",
-    "replacement_first": "新表首读", "replacement_last": "换表末读",
+    "replacement_first": "新表首段", "replacement_last": "换表末读",
+    "gap_unproven": "不可证明缺口",
 }
 
 

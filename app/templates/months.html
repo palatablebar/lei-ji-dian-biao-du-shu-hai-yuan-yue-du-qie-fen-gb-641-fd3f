@@ -24,7 +24,15 @@
   <div class="kpi"><span class="kpi-label">账单金额</span><span class="kpi-value mono">{{ totals.bill_amount|yuan }}</span><span class="kpi-unit">元</span></div>
   <div class="kpi"><span class="kpi-label">账单</span><span class="kpi-value mono">{{ totals.bill_count }}</span></div>
   <div class="kpi"><span class="kpi-label">尾差组</span><span class="kpi-value mono">{{ adjustments }}</span></div>
+  <div class="kpi"><span class="kpi-label">不可证明缺口</span><span class="kpi-value mono">{{ gaps|length }}</span></div>
 </section>
+
+{% if gaps %}
+<section class="notice notice-warn" role="note">
+  本批次有 {{ gaps|length }} 段不可证明缺口（{% for gap in gaps %}{{ gap.meter_id }}{{ ", " if not loop.last }}{% endfor %}），
+  电量按 0 计入月度与账单，明细见<a href="/intervals">区间还原页</a>与区间 CSV。
+</section>
+{% endif %}
 
 {% for group in groups %}
 <section class="panel">

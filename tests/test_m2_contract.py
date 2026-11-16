@@ -83,6 +83,79 @@ def test_capacity_and_multiplier_loaded(settings):
     assert contracts["M0001"].primary_register == "TOTAL"
 
 
+def _row(meter_id: str, **extra) -> dict:
+    row = {"meter_id": meter_id, "name": meter_id, "capacity": "99999.9",
+           "multiplier": "1", "unit": "kWh", "registers": "TOTAL",
+           "replaced_at": "", "replaced_by": "",
+           "install_reading": "", "install_order": ""}
+    row.update(extra)
+    return row
+
+
+def test_install_evidence_parsed(settings):
+    """装表底码 + 装工单同时存在才算证据充分。"""
+    contracts = contract.load(settings)
+    assert contracts["M0005"].install_reading == Decimal("0")
+    assert contracts["M0005"].install_order == "ZB-2026-0080"
+    assert contracts["M0005"].install_proven is True
+    assert contracts["M0012"].install_reading == Decimal("100")
+    assert contracts["M0012"].install_proven is True
+    assert contracts["M0011"].install_reading is None
+    assert contracts["M0011"].install_proven is False
+    assert contracts["M0001"].install_proven is False
+
+
+def test_install_reading_validated():
+    """底码不是数字、为负、超满量都让契约整批失败。"""
+    with pytest.raises(errors.ContractInvalid):
+        contract.parse_rows([_row("A1", install_reading="abc")])
+    with pytest.raises(errors.ContractInvalid):
+        contract.parse_rows([_row("A1", install_reading="-5")])
+    with pytest.raises(errors.ContractInvalid):
+        contract.parse_rows([_row("A1", capacity="100", install_reading="100.1")])
+    ok = contract.parse_rows([_row("A1", install_reading="0", install_order="ZB-1")])
+    assert ok["A1"].install_proven is True
+    # 有底码无工单：契约合法，但证据不足，首段只能记缺口
+    half = contract.parse_rows([_row("A2", install_reading="10")])
+    assert half["A2"].install_proven is False
+
+
+def test_swap_chain_links_validated():
+    """链式换表合法；成环、多表一继、时点落单都要整批失败。"""
+    chain = contract.parse_rows([
+        _row("A", replaced_at="2026-02-01T00:00:00+08:00", replaced_by="B"),
+        _row("B", replaced_at="2026-03-01T00:00:00+08:00", replaced_by="C"),
+        _row("C")])
+    assert chain["B"].replaced_by == "C"
+    # 成环：A→B→A
+    with pytest.raises(errors.ContractInvalid):
+        contract.parse_rows([
+            _row("A", replaced_at="2026-02-01T00:00:00+08:00", replaced_by="B"),
+            _row("B", replaced_at="2026-03-01T00:00:00+08:00", replaced_by="A")])
+    # 自环
+    with pytest.raises(errors.ContractInvalid):
+        contract.parse_rows([
+            _row("A", replaced_at="2026-02-01T00:00:00+08:00", replaced_by="A")])
+    # 多表一继：A→C 且 B→C
+    with pytest.raises(errors.ContractInvalid):
+        contract.parse_rows([
+            _row("A", replaced_at="2026-02-01T00:00:00+08:00", replaced_by="C"),
+            _row("B", replaced_at="2026-02-01T00:00:00+08:00", replaced_by="C"),
+            _row("C")])
+    # 有时点没新表号
+    with pytest.raises(errors.ContractInvalid):
+        contract.parse_rows([_row("A", replaced_at="2026-02-01T00:00:00+08:00")])
+
+
+def test_contract_row_column_count_checked():
+    """契约行列数与表头不符不能静默错位（DictReader 会把多列塞进 None 键）。"""
+    row = _row("A1")
+    row[None] = ["多余列"]
+    with pytest.raises(errors.ContractInvalid):
+        contract.parse_rows([row])
+
+
+
 def test_preview_reports_estimate_and_missing(settings):
     contracts = contract.load(settings)
     missing = service.preview({"meter_id": "M0001", "register": "TOTAL",

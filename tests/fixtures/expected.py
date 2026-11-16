@@ -39,9 +39,28 @@ M0002_MONTHS = ("2026-01", "2026-02")
 M0002_SPLIT = (Decimal("435.484"), Decimal("64.516"))
 M0003_ROLLOVER = Decimal("249.900")   # 9999.9 − 9900 + 150
 M0004_LAST = Decimal("60.000")        # 换表前末段
-M0005_FIRST = Decimal("45.000")       # 新表首读从零起算
+M0005_FIRST = Decimal("45.000")       # 新表首段按装表底码 0 起算
 M0006_USAGE = Decimal("200.000")      # 0.2 MWh
 M0008_TOTAL = Decimal("1000.000")
+
+# 链式换表样例 readings_swap_chain.csv（手算）
+CHAIN_RAW = 11                        # 读数行，全部有效
+CHAIN_INTERVALS = 10                  # 7 段计量 + 3 段不可证明缺口
+CHAIN_GAPS = 3
+CHAIN_ALLOCATIONS = 5                 # 同月同表聚合后 5 行
+CHAIN_BILLS = 5
+CHAIN_MONTHS = 3
+CHAIN_USAGE = Decimal("350.000")      # 60+35+15+35+65+60+80，缺口不计
+CHAIN_AMOUNT = Decimal("227.50")      # 350 × 0.65
+CHAIN_MONTH_TOTALS = {
+    "2026-01": Decimal("60.000"),
+    "2026-02": Decimal("190.000"),
+    "2026-03": Decimal("100.000"),
+}
+CHAIN_M0010_LAST = Decimal("60.000")  # 一代末段计量
+CHAIN_M0011_USAGE = Decimal("50.000") # 二代两段：首段缺口不计
+CHAIN_M0012_FIRST = Decimal("35.000") # 三代首段：135 − 底码 100
+CHAIN_M0014_USAGE = Decimal("80.000") # 首读 480 仍作锚点：560 − 480
 
 # 三分量闭合后的 M0008（尾差并入平段）
 M0008_JAN = {"TOTAL": Decimal("344.444"), "PEAK": Decimal("137.778"),

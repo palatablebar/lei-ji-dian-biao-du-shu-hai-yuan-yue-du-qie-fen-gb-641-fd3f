@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, Request
 
 from ... import config
 from ...web import Ctx, get_ctx, render
+from ..m2_contract import contract as contract_mod
 from ..m6_batches import resume as resume_mod
-from . import service
+from . import restore, service
 
 router = APIRouter(tags=["M4 区间还原"])
 
@@ -20,9 +21,11 @@ def api_rebuild(payload: dict | None = None, ctx: Ctx = Depends(get_ctx)) -> dic
     return {
         "batch_id": result["batch_id"],
         "intervals": service.payload(result["intervals"]),
+        "gaps": service.payload(result["gaps"]),
         "totals": {key: str(value) for key, value in result["totals"].items()},
         "method_counts": result["method_counts"],
         "swaps": result["swaps"],
+        "chains": result["chains"],
     }
 
 
@@ -32,7 +35,7 @@ def page_intervals(request: Request, batch_id: str | None = None,
     batch = ctx.current_batch(batch_id)
     intervals: list[dict] = []
     method_counts: dict = {}
-    swaps: list[dict] = []
+    chains: list[dict] = []
     if batch is not None:
         intervals = sorted(
             ctx.store.load_intervals(batch["batch_id"]),
@@ -42,7 +45,9 @@ def page_intervals(request: Request, batch_id: str | None = None,
                               item["start_at"]))
         for item in intervals:
             method_counts[item["method"]] = method_counts.get(item["method"], 0) + 1
-        swaps = service.swaps_payload(ctx.settings)
+        chains = service.swap_chains(contract_mod.load(ctx.settings))
+    gap_rows = [item for item in intervals if item["method"] == restore.GAP_METHOD]
     return render(request, "intervals.html", page="intervals", page_title="区间还原",
                   batch=batch, intervals=intervals, method_counts=method_counts,
-                  swaps=swaps, flagged=service.flagged(intervals))
+                  chains=chains, gaps=gap_rows,
+                  flagged=service.flagged(intervals))

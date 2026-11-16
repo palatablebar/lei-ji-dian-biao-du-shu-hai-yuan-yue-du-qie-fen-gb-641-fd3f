@@ -35,18 +35,33 @@ def rebuild(settings, store, batch_id: str) -> dict:
         "batch_id": batch_id,
         "contracts": {m.meter_id: m for m in contracts.values()},
         "intervals": intervals,
+        "gaps": restore.gaps(intervals),
         "totals": summary,
         "swaps": swaps.replacement_pairs(contracts),
+        "chains": swap_chains(contracts),
         "method_counts": _counts(intervals),
     }
 
 
-def swaps_payload(settings) -> list[dict]:
-    contracts = contract_mod.load(settings)
-    return [{"meter_id": item.meter_id, "name": item.name,
-             "replaced_by": item.replaced_by,
-             "replaced_at": item.replaced_at.isoformat() if item.replaced_at else None}
-            for item in contracts.values() if item.replaced_by]
+def swap_chains(contracts: dict[str, contract_mod.MeterContract]) -> list[dict]:
+    """整条换表链 + 每环的装表证据状态，页面与接口共用。"""
+    out = []
+    for chain in swaps.chains(contracts):
+        links = []
+        for meter_id in chain:
+            meter = contracts[meter_id]
+            links.append({
+                "meter_id": meter_id,
+                "name": meter.name,
+                "replaced_at": (meter.replaced_at.isoformat()
+                                if meter.replaced_at else None),
+                "install_reading": (str(meter.install_reading)
+                                    if meter.install_reading is not None else None),
+                "install_order": meter.install_order,
+                "install_proven": meter.install_proven,
+            })
+        out.append({"meters": chain, "links": links})
+    return out
 
 
 def _counts(intervals: list[dict]) -> dict:

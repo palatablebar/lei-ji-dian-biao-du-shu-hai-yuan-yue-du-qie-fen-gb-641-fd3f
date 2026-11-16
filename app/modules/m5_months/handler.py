@@ -31,10 +31,14 @@ def page_months(request: Request, batch_id: str | None = None,
     groups: list[dict] = []
     bills: list[dict] = []
     adjustments = 0
+    gaps: list[dict] = []
     if batch is not None:
         allocations = ctx.store.load_allocations(batch["batch_id"])
         bills = ctx.store.load_bills(batch["batch_id"])
         groups = service.rows_by_month(allocations, service.primary_map(ctx.settings))
         adjustments = sum(1 for item in allocations if item["tou_adjusted"])
+        gaps = [item for item in ctx.store.load_intervals(batch["batch_id"])
+                if item["method"] == "gap_unproven"]
     return render(request, "months.html", page="months", page_title="月度分摊",
-                  batch=batch, groups=groups, bills=bills, adjustments=adjustments)
+                  batch=batch, groups=groups, bills=bills, adjustments=adjustments,
+                  gaps=gaps)

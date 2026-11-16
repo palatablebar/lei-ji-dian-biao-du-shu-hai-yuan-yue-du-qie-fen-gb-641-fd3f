@@ -18,7 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CHINA_TZ = dt.timezone(dt.timedelta(hours=8), "Asia/Shanghai")
 UTC = dt.timezone.utc
 
-RULE_VERSION = "meterback/1.0.0"
+RULE_VERSION = "meterback/1.1.0"
 
 USAGE_QUANT = Decimal("0.001")
 MONEY_QUANT = Decimal("0.01")
@@ -73,6 +73,7 @@ REQUIRED_COLUMNS = ("meter_id", "register", "read_at", "reading")
 # 可演示样例（白名单，避免任意路径读取）
 SAMPLES = {
     "readings_dirty.csv": "脏样例 · 13 类问题",
+    "readings_swap_chain.csv": "链式换表 · 不可证明缺口",
     "readings_clean.csv": "干净样例",
     "readings_gbk.csv": "GBK 中文表头",
     "readings_truncated.csv": "末行截断",

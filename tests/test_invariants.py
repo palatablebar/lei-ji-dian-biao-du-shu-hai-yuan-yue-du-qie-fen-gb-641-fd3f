@@ -51,6 +51,11 @@ def test_readings_partition_holds(store, batch_id):
 
 def test_interval_usage_never_negative(store, batch_id):
     for interval in store.load_intervals(batch_id):
+        if interval["method"] == "gap_unproven":
+            # 不可证明缺口：电量恒 0，且必须带缺口标记
+            assert interval["usage_kwh"] == Decimal("0.000")
+            assert "K_GAP_UNPROVEN" in interval["flags"]
+            continue
         assert interval["usage_kwh"] > 0
         assert interval["delta"] > 0
         assert interval["end_at"] > interval["start_at"]

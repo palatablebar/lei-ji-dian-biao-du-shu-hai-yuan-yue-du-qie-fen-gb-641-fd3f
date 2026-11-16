@@ -60,14 +60,14 @@ def test_replacement_splits_two_segments(settings):
     assert new[0]["usage_kwh"] == expected.M0005_FIRST
 
 
-def test_new_meter_first_reading_counts_from_zero(settings):
-    """换表后新表首读本身就是一段用量，不能当基准丢掉。"""
+def test_new_meter_first_reading_counts_from_install_base(settings):
+    """换表后新表首段从装表底码起算（M0005 底码为 0），不能当基准丢掉。"""
     intervals, _ = _intervals(settings)
     first = _find(intervals, "M0005", "TOTAL")[0]
     assert first["prev_reading"] == Decimal("0")
     assert first["days"] == Decimal("10.000000000")
     assert first["usage_kwh"] == expected.M0005_FIRST
-    assert "K_REPLACEMENT_FIRST" in first["flags"]
+    assert "K_INSTALL_BASE" in first["flags"]
 
 
 def test_multiplier_applied(settings):
